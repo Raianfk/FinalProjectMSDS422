@@ -1,1 +1,158 @@
+Project: Using Machine Learning To Predict Career Success Based on Academic Success
+Objective: Analyze factors influencing career success, including academic performance, internships, certifications, soft skills, and networking, to understand their impact on job offers, salary, career satisfaction, and promotions.
+Problem Statement:
 
+What academic metrics (High School GPA, SAT Score, University GPA) correlate most with career outcomes?
+Do internships, projects, or certifications improve job offers or salaries?
+How do soft skills and networking scores influence promotions and career satisfaction?
+Are there disparities in outcomes by gender or field of study?
+Can we predict salary or career satisfaction using other variables?
+Key Variables:
+
+Educational Background: High school GPA, SAT score, university ranking, university GPA, and field of study.
+Professional Experience: Internships completed, projects completed, certifications, soft skills score, networking score.
+Career Outcomes: Number of job offers, starting salary, career satisfaction, years to promotion, current job level, work-life balance, and entrepreneurship status.
+
+
+# Imports 
+import pandas as pd
+import numpy as np
+import joblib
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.metrics import mean_squared_error, r2_score
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Load the dataset
+file_path = "/Users/raiank/Downloads/education_career_success.csv"
+df = pd.read_csv(file_path)
+
+# Display basic dataset information
+df.info()
+
+# Set plot style
+plt.style.use("ggplot")
+
+# Correlation heatmap for numerical variables
+plt.figure(figsize=(12, 8))
+sns.heatmap(df.corr(numeric_only=True), annot=True, fmt=".2f", cmap="coolwarm", linewidths=0.5)
+plt.title("Correlation Heatmap of Numerical Features")
+plt.show()
+
+# Distribution of starting salary
+plt.figure(figsize=(8, 5))
+sns.histplot(df["Starting_Salary"], bins=30, kde=True)
+plt.title("Distribution of Starting Salary")
+plt.xlabel("Starting Salary ($)")
+plt.ylabel("Frequency")
+plt.show()
+
+# Boxplot of career satisfaction by job level
+plt.figure(figsize=(8, 5))
+sns.boxplot(x="Current_Job_Level", y="Career_Satisfaction", data=df, order=["Entry", "Mid", "Senior"])
+plt.title("Career Satisfaction by Job Level")
+plt.xlabel("Job Level")
+plt.ylabel("Career Satisfaction Score")
+plt.show()
+
+# Relationship between university ranking and starting salary
+plt.figure(figsize=(8, 5))
+sns.scatterplot(x=df["University_Ranking"], y=df["Starting_Salary"], alpha=0.5)
+plt.title("University Ranking vs Starting Salary")
+plt.xlabel("University Ranking (Lower is Better)")
+plt.ylabel("Starting Salary ($)")
+plt.show()
+
+##ML Training 
+#Data Preprocessing
+df_cleaned = df.copy()
+df_cleaned.dropna(inplace=True)
+
+# Encoding variables 
+categorical_features = ["Gender", "Field_of_Study", "Current_Job_Level", "Entrepreneurship"]
+label_encoders = {}
+
+for col in categorical_features:
+    le = LabelEncoder()
+    df_cleaned[col] = le.fit_transform(df_cleaned[col])
+    label_encoders[col] = le  # Store encoder for future use
+
+# Adding numerial factors 
+scaler = StandardScaler()
+numerical_features = ["High_School_GPA", "SAT_Score", "University_Ranking", "University_GPA",
+                      "Internships_Completed", "Projects_Completed", "Certifications",
+                      "Soft_Skills_Score", "Networking_Score", "Starting_Salary",
+                      "Years_to_Promotion", "Work_Life_Balance"]
+
+df_cleaned[numerical_features] = scaler.fit_transform(df_cleaned[numerical_features])
+
+# Creating a new feature 
+df_cleaned["Work_Experience_Score"] = (
+    df_cleaned["Internships_Completed"] * 2 + df_cleaned["Projects_Completed"] + df_cleaned["Certifications"] * 1.5
+)
+
+# Columnn cleaning 
+df_cleaned.drop(columns=["Student_ID"], inplace=True)
+
+# Define Features and Target Variable
+X = df_cleaned.drop(columns=["Starting_Salary"])  # Features
+y = df_cleaned["Starting_Salary"]  # Target variable
+
+# Train-test split (80-20)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Define models
+models = {
+    "Linear Regression": LinearRegression(),
+    "Random Forest": RandomForestRegressor(n_estimators=100, random_state=42),
+    "Gradient Boosting": GradientBoostingRegressor(n_estimators=100, learning_rate=0.1, random_state=42),
+    "Neural Network (MLP)": MLPRegressor(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42)
+}
+
+# Training 
+results = {}
+best_model = None
+best_score = -np.inf  # Initialize with negative infinity
+
+for model_name, model in models.items():
+    # Train model
+    model.fit(X_train, y_train)
+    
+    # Predictions
+    y_pred = model.predict(X_test)
+    
+    # Evaluate model performance
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    r2 = r2_score(y_test, y_pred)
+    
+    # Store results
+    results[model_name] = {"RMSE": rmse, "R² Score": r2}
+    
+    # Track the best model
+    if r2 > best_score:
+        best_score = r2
+        best_model = model
+
+# Save model 
+joblib.dump(best_model, "best_model.pkl")
+
+
+results_df = pd.DataFrame(results).T
+
+
+print("Model Performance Summary:")
+print(results_df)
+
+# Visuals 
+plt.figure(figsize=(10, 5))
+sns.barplot(x=results_df.index, y=results_df["RMSE"], palette="coolwarm")
+plt.xlabel("Model")
+plt.ylabel("Root Mean Squared Error (RMSE)")
+plt.title("Model Performance Comparison")
+plt.xticks(rotation=45)
+plt.show()
